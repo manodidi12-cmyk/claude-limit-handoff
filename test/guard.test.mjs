@@ -109,4 +109,47 @@ const below = spawnSync(process.execPath, [cli, "statusline"], {
 });
 assert.equal(below.status, 0);
 
+const expiredStateDir = path.join(tmp, "state-expired");
+fs.mkdirSync(expiredStateDir, { recursive: true });
+fs.writeFileSync(
+  path.join(expiredStateDir, "state.json"),
+  JSON.stringify({
+    limits: {
+      fiveHour: { usedPercentage: 100, resetsAt: Math.floor(Date.now() / 1000) - 60 },
+      sevenDay: { usedPercentage: 79, resetsAt: Math.floor(Date.now() / 1000) - 60 }
+    }
+  }),
+  "utf8"
+);
+
+const expiredStatus = spawnSync(process.execPath, [cli, "statusline"], {
+  input: JSON.stringify({ workspace: { current_dir: project } }),
+  encoding: "utf8",
+  env: {
+    ...process.env,
+    HOME: home,
+    USERPROFILE: home,
+    CLAUDE_LIMIT_HANDOFF_STATE_DIR: expiredStateDir
+  },
+  cwd: project
+});
+assert.equal(expiredStatus.status, 0);
+assert.match(expiredStatus.stdout, /5h 0%/);
+assert.match(expiredStatus.stdout, /7d 0%/);
+assert.match(expiredStatus.stdout, /OK 90%/);
+
+const expiredHook = spawnSync(process.execPath, [cli, "hook", "90"], {
+  input: JSON.stringify({ hook_event_name: "PreToolUse", cwd: project }),
+  encoding: "utf8",
+  env: {
+    ...process.env,
+    HOME: home,
+    USERPROFILE: home,
+    CLAUDE_LIMIT_HANDOFF_STATE_DIR: expiredStateDir
+  },
+  cwd: project
+});
+assert.equal(expiredHook.status, 0);
+assert.equal(expiredHook.stdout, "");
+
 console.log("ok");

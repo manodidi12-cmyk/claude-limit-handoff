@@ -102,16 +102,35 @@ function extractLimits(input) {
   };
 }
 
+function mergeLimitWindow(previous = {}, current = {}, nowSeconds = Math.floor(Date.now() / 1000)) {
+  const currentUsed = current.usedPercentage;
+  const currentReset = current.resetsAt;
+  const previousReset = toNumber(previous.resetsAt);
+
+  if (currentUsed !== null || currentReset !== null) {
+    return {
+      usedPercentage: currentUsed ?? previous.usedPercentage ?? null,
+      resetsAt: currentReset ?? previous.resetsAt ?? null
+    };
+  }
+
+  if (previousReset !== null && previousReset <= nowSeconds) {
+    return {
+      usedPercentage: 0,
+      resetsAt: null
+    };
+  }
+
+  return {
+    usedPercentage: previous.usedPercentage ?? null,
+    resetsAt: previous.resetsAt ?? null
+  };
+}
+
 function mergeLimits(previous = {}, current = {}) {
   return {
-    fiveHour: {
-      usedPercentage: current.fiveHour?.usedPercentage ?? previous.fiveHour?.usedPercentage ?? null,
-      resetsAt: current.fiveHour?.resetsAt ?? previous.fiveHour?.resetsAt ?? null
-    },
-    sevenDay: {
-      usedPercentage: current.sevenDay?.usedPercentage ?? previous.sevenDay?.usedPercentage ?? null,
-      resetsAt: current.sevenDay?.resetsAt ?? previous.sevenDay?.resetsAt ?? null
-    }
+    fiveHour: mergeLimitWindow(previous.fiveHour, current.fiveHour),
+    sevenDay: mergeLimitWindow(previous.sevenDay, current.sevenDay)
   };
 }
 
@@ -637,7 +656,7 @@ function statusLine(input) {
 
 function shouldTrigger(state, input) {
   const threshold = getThreshold();
-  const limits = state.limits ?? extractLimits(input);
+  const limits = mergeLimits(state.limits, extractLimits(input));
   const used = limits.fiveHour?.usedPercentage;
   return Number.isFinite(used) && used >= threshold;
 }
@@ -645,15 +664,24 @@ function shouldTrigger(state, input) {
 function hook(input) {
   const state = loadState();
   const eventName = input.hook_event_name ?? input.hookEventName ?? input.event ?? "unknown";
+  const limits = mergeLimits(state.limits, extractLimits(input));
+  const effectiveState = { ...state, limits };
 
-  if (!shouldTrigger(state, input)) {
+  if (JSON.stringify(state.limits) !== JSON.stringify(limits)) {
+    saveState({
+      ...effectiveState,
+      updatedAt: new Date().toISOString()
+    });
+  }
+
+  if (!shouldTrigger(effectiveState, input)) {
     return;
   }
 
   const threshold = getThreshold();
-  const used = compactPercent((state.limits ?? extractLimits(input)).fiveHour?.usedPercentage);
+  const used = compactPercent(limits.fiveHour?.usedPercentage);
   const reason = `Claude chegou a ${used ?? "mais de"}% da janela de 5 horas (limite configurado: ${threshold}%).`;
-  const handoffPath = buildHandoff(input, state, reason);
+  const handoffPath = buildHandoff(input, effectiveState, reason);
   logEvent({ eventName, action: "handoff", handoffPath, used, threshold });
 
   if (eventName === "PreToolUse") {
