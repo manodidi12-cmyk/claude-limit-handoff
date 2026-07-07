@@ -50,6 +50,7 @@ function getThreshold() {
 }
 
 function toNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
@@ -104,8 +105,15 @@ function extractLimits(input) {
 
 function mergeLimitWindow(previous = {}, current = {}, nowSeconds = Math.floor(Date.now() / 1000)) {
   const currentUsed = current.usedPercentage;
-  const currentReset = current.resetsAt;
+  const currentReset = toNumber(current.resetsAt);
   const previousReset = toNumber(previous.resetsAt);
+
+  if (currentReset !== null && currentReset <= nowSeconds) {
+    return {
+      usedPercentage: 0,
+      resetsAt: null
+    };
+  }
 
   if (currentUsed !== null || currentReset !== null) {
     return {

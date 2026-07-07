@@ -138,6 +138,28 @@ assert.match(expiredStatus.stdout, /5h 0%/);
 assert.match(expiredStatus.stdout, /7d 0%/);
 assert.match(expiredStatus.stdout, /OK 90%/);
 
+const staleCurrentStatus = spawnSync(process.execPath, [cli, "statusline"], {
+  input: JSON.stringify({
+    workspace: { current_dir: project },
+    rate_limits: {
+      five_hour: { used_percentage: 100, resets_at: Math.floor(Date.now() / 1000) - 60 },
+      seven_day: { used_percentage: 79, resets_at: Math.floor(Date.now() / 1000) - 60 }
+    }
+  }),
+  encoding: "utf8",
+  env: {
+    ...process.env,
+    HOME: home,
+    USERPROFILE: home,
+    CLAUDE_LIMIT_HANDOFF_STATE_DIR: path.join(tmp, "state-stale-current")
+  },
+  cwd: project
+});
+assert.equal(staleCurrentStatus.status, 0);
+assert.match(staleCurrentStatus.stdout, /5h 0%/);
+assert.match(staleCurrentStatus.stdout, /7d 0%/);
+assert.match(staleCurrentStatus.stdout, /OK 90%/);
+
 const expiredHook = spawnSync(process.execPath, [cli, "hook", "90"], {
   input: JSON.stringify({ hook_event_name: "PreToolUse", cwd: project }),
   encoding: "utf8",
