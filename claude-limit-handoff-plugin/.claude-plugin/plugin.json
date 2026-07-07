@@ -1,0 +1,32 @@
+{
+  "name": "claude-limit-handoff",
+  "displayName": "Claude Limit Handoff",
+  "version": "0.1.0",
+  "description": "Pause Claude Code near the 5-hour usage limit and generate a Codex handoff file.",
+  "author": {
+    "name": "Diego"
+  },
+  "homepage": "https://github.com/manodidi12-cmyk/claude-limit-handoff",
+  "repository": "https://github.com/manodidi12-cmyk/claude-limit-handoff",
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "hooks",
+    "statusline",
+    "codex",
+    "handoff",
+    "usage-limit"
+  ],
+  "hooks": "./hooks/hooks.json",
+  "skills": "./skills",
+  "userConfig": {
+    "threshold": {
+      "type": "number",
+      "title": "Usage threshold",
+      "description": "Percentage of the 5-hour Claude usage window that triggers the Codex handoff.",
+      "default": 90,
+      "min": 1,
+      "max": 100
+    }
+  }
+}

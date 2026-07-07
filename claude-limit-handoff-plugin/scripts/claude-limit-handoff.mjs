@@ -1,0 +1,378 @@
+#!/usr/bin/env node
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import process from "node:process";
+import { execFileSync } from "node:child_process";
+
+const DEFAULT_THRESHOLD = 90;
+const STATE_DIR = process.env.CLAUDE_LIMIT_HANDOFF_STATE_DIR
+  ? path.resolve(process.env.CLAUDE_LIMIT_HANDOFF_STATE_DIR)
+  : path.join(os.homedir(), ".claude", "limit-handoff");
+const STATE_FILE = path.join(STATE_DIR, "state.json");
+const LOG_FILE = path.join(STATE_DIR, "events.log");
+const HANDOFF_NAME = "CLAUDE_TO_CODEX_HANDOFF.md";
+
+function ensureStateDir() {
+  fs.mkdirSync(STATE_DIR, { recursive: true });
+}
+
+function readStdin() {
+  try {
+    return fs.readFileSync(0, "utf8");
+  } catch {
+    return "";
+  }
+}
+
+function parseJson(text, fallback = {}) {
+  if (!text || !text.trim()) return fallback;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return fallback;
+  }
+}
+
+function getThreshold() {
+  const fromArg = process.argv[3] ? Number(process.argv[3]) : null;
+  if (Number.isFinite(fromArg) && fromArg > 0) return fromArg;
+
+  const raw = process.env.CLAUDE_LIMIT_HANDOFF_THRESHOLD;
+  const value = raw ? Number(raw) : DEFAULT_THRESHOLD;
+  return Number.isFinite(value) && value > 0 ? value : DEFAULT_THRESHOLD;
+}
+
+function toNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function getCwd(input) {
+  const candidates = [
+    input.cwd,
+    input.workspace?.current_dir,
+    input.workspace?.cwd,
+    input.project_dir,
+    input.projectDir,
+    process.env.CLAUDE_PROJECT_DIR,
+    process.cwd()
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate && typeof candidate === "string") return path.resolve(candidate);
+  }
+  return process.cwd();
+}
+
+function unixSecondsToLocalTime(seconds) {
+  const value = toNumber(seconds);
+  if (value === null) return "--";
+  return new Date(value * 1000).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
+function compactPercent(value) {
+  const number = toNumber(value);
+  return number === null ? null : Math.round(number);
+}
+
+function extractLimits(input) {
+  const five = input.rate_limits?.five_hour ?? input.rateLimits?.fiveHour ?? {};
+  const week = input.rate_limits?.seven_day ?? input.rateLimits?.sevenDay ?? {};
+  return {
+    fiveHour: {
+      usedPercentage: toNumber(five.used_percentage ?? five.usedPercentage),
+      resetsAt: toNumber(five.resets_at ?? five.resetsAt)
+    },
+    sevenDay: {
+      usedPercentage: toNumber(week.used_percentage ?? week.usedPercentage),
+      resetsAt: toNumber(week.resets_at ?? week.resetsAt)
+    }
+  };
+}
+
+function mergeLimits(previous = {}, current = {}) {
+  return {
+    fiveHour: {
+      usedPercentage: current.fiveHour?.usedPercentage ?? previous.fiveHour?.usedPercentage ?? null,
+      resetsAt: current.fiveHour?.resetsAt ?? previous.fiveHour?.resetsAt ?? null
+    },
+    sevenDay: {
+      usedPercentage: current.sevenDay?.usedPercentage ?? previous.sevenDay?.usedPercentage ?? null,
+      resetsAt: current.sevenDay?.resetsAt ?? previous.sevenDay?.resetsAt ?? null
+    }
+  };
+}
+
+function loadState() {
+  return parseJson(fs.existsSync(STATE_FILE) ? fs.readFileSync(STATE_FILE, "utf8") : "", {});
+}
+
+function saveState(state) {
+  ensureStateDir();
+  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), "utf8");
+}
+
+function logEvent(event) {
+  ensureStateDir();
+  const line = JSON.stringify({ at: new Date().toISOString(), ...event });
+  fs.appendFileSync(LOG_FILE, `${line}\n`, "utf8");
+}
+
+function runGit(args, cwd) {
+  try {
+    return execFileSync("git", args, {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 3000
+    }).trim();
+  } catch {
+    return "";
+  }
+}
+
+function readRecentTranscript(transcriptPath) {
+  if (!transcriptPath || typeof transcriptPath !== "string" || !fs.existsSync(transcriptPath)) {
+    return [];
+  }
+
+  const text = fs.readFileSync(transcriptPath, "utf8");
+  const lines = text.trim().split(/\r?\n/).slice(-80);
+  const messages = [];
+
+  for (const line of lines) {
+    const entry = parseJson(line, null);
+    if (!entry) continue;
+    const role = entry.message?.role ?? entry.role ?? entry.type;
+    const rawContent = entry.message?.content ?? entry.content ?? entry.summary;
+    const content = normalizeContent(rawContent);
+    if (!content) continue;
+    if (role === "user" || role === "assistant") {
+      messages.push({ role, content });
+    }
+  }
+
+  return messages.slice(-12);
+}
+
+function normalizeContent(content) {
+  if (typeof content === "string") return content.trim();
+  if (!Array.isArray(content)) return "";
+
+  return content
+    .map((item) => {
+      if (typeof item === "string") return item;
+      if (item?.type === "text" && typeof item.text === "string") return item.text;
+      if (item?.type === "tool_use") return `[tool_use: ${item.name ?? "unknown"}]`;
+      if (item?.type === "tool_result") return "[tool_result]";
+      return "";
+    })
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
+function truncate(text, max = 1200) {
+  const cleaned = String(text ?? "").replace(/\r/g, "").trim();
+  return cleaned.length > max ? `${cleaned.slice(0, max).trim()}\n...` : cleaned;
+}
+
+function markdownList(items) {
+  if (!items.length) return "- Sem dados suficientes.";
+  return items.map((item) => `- ${item}`).join("\n");
+}
+
+function buildHandoff(input, state, reason) {
+  const cwd = getCwd(input);
+  const handoffPath = path.join(cwd, HANDOFF_NAME);
+  const limits = state.limits ?? extractLimits(input);
+  const transcriptPath = input.transcript_path ?? input.transcriptPath ?? state.transcriptPath;
+  const recentMessages = readRecentTranscript(transcriptPath);
+  const gitBranch = runGit(["branch", "--show-current"], cwd);
+  const gitStatus = runGit(["status", "--short"], cwd);
+  const gitDiffStat = runGit(["diff", "--stat"], cwd);
+  const sessionId = input.session_id ?? input.sessionId ?? state.sessionId ?? "desconhecida";
+  const resetText = unixSecondsToLocalTime(limits.fiveHour?.resetsAt);
+
+  const lastUser = [...recentMessages].reverse().find((message) => message.role === "user");
+  const lastAssistant = [...recentMessages].reverse().find((message) => message.role === "assistant");
+
+  const content = `# Handoff do Claude para o Codex
+
+Gerado automaticamente em ${new Date().toLocaleString("pt-BR")}.
+
+## Por que o Claude pausou
+
+- Motivo: ${reason}
+- Uso da janela de 5 horas: ${compactPercent(limits.fiveHour?.usedPercentage) ?? "desconhecido"}%
+- Reset estimado da janela de 5 horas: ${resetText}
+- Sessao Claude: ${sessionId}
+
+## Como continuar no Codex
+
+1. Abra este projeto no terminal.
+2. Inicie o Codex no mesmo diretorio.
+3. Envie: "Continue a partir do arquivo ${HANDOFF_NAME}. Leia o estado atual do repositorio antes de editar."
+4. Peça para o Codex verificar o git diff e rodar os testes/validacoes relevantes antes de finalizar.
+
+## Ultimo pedido do usuario
+
+${lastUser ? truncate(lastUser.content) : "Nao consegui extrair o ultimo pedido do transcript."}
+
+## Ultima resposta do Claude
+
+${lastAssistant ? truncate(lastAssistant.content) : "Nao consegui extrair a ultima resposta do transcript."}
+
+## Estado do repositorio
+
+- Diretorio: ${cwd}
+- Branch: ${gitBranch || "nao detectada"}
+- Transcript: ${transcriptPath || "nao detectado"}
+
+### Arquivos alterados
+
+\`\`\`text
+${gitStatus || "Sem alteracoes detectadas pelo git ou repositorio nao inicializado."}
+\`\`\`
+
+### Diff stat
+
+\`\`\`text
+${gitDiffStat || "Sem diff stat disponivel."}
+\`\`\`
+
+## Conversa recente
+
+${markdownList(
+  recentMessages.map((message) => `${message.role}: ${truncate(message.content, 700).replace(/\n+/g, " ")}`)
+)}
+
+## Proximos passos sugeridos
+
+- Reconstituir o contexto lendo este arquivo, o git diff e os arquivos modificados.
+- Continuar somente a partir do ponto atual, sem refazer alteracoes ja aplicadas.
+- Validar a solucao com comandos do projeto quando existirem.
+- Ao finalizar, resumir arquivos alterados, validacoes executadas e riscos restantes.
+`;
+
+  fs.writeFileSync(handoffPath, content, "utf8");
+  return handoffPath;
+}
+
+function statusLine(input) {
+  const currentLimits = extractLimits(input);
+  const cwd = getCwd(input);
+  const threshold = getThreshold();
+  const existing = loadState();
+  const limits = mergeLimits(existing.limits, currentLimits);
+  const nextState = {
+    ...existing,
+    updatedAt: new Date().toISOString(),
+    cwd,
+    sessionId: input.session_id ?? input.sessionId ?? existing.sessionId,
+    transcriptPath: input.transcript_path ?? input.transcriptPath ?? existing.transcriptPath,
+    threshold,
+    limits
+  };
+  saveState(nextState);
+
+  const model = input.model?.display_name ?? input.model?.name ?? "Claude";
+  const five = compactPercent(limits.fiveHour.usedPercentage);
+  const week = compactPercent(limits.sevenDay.usedPercentage);
+  const reset = unixSecondsToLocalTime(limits.fiveHour.resetsAt);
+  const prefix = five !== null && five >= threshold ? "PAUSAR" : "OK";
+  const parts = [`${model}`, `5h ${five ?? "--"}%`];
+  if (five !== null) parts.push(`reset ${reset}`);
+  if (week !== null) parts.push(`7d ${week}%`);
+  parts.push(`${prefix} ${threshold}%`);
+  process.stdout.write(parts.join(" | "));
+}
+
+function shouldTrigger(state, input) {
+  const threshold = getThreshold();
+  const limits = state.limits ?? extractLimits(input);
+  const used = limits.fiveHour?.usedPercentage;
+  return Number.isFinite(used) && used >= threshold;
+}
+
+function hook(input) {
+  const state = loadState();
+  const eventName = input.hook_event_name ?? input.hookEventName ?? input.event ?? "unknown";
+
+  if (!shouldTrigger(state, input)) {
+    return;
+  }
+
+  const threshold = getThreshold();
+  const used = compactPercent((state.limits ?? extractLimits(input)).fiveHour?.usedPercentage);
+  const reason = `Claude chegou a ${used ?? "mais de"}% da janela de 5 horas (limite configurado: ${threshold}%).`;
+  const handoffPath = buildHandoff(input, state, reason);
+  logEvent({ eventName, action: "handoff", handoffPath, used, threshold });
+
+  if (eventName === "PreToolUse") {
+    process.stdout.write(
+      JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason: `${reason} Handoff criado em ${handoffPath}. Pare agora e peça ao usuario para continuar no Codex usando esse arquivo.`
+        }
+      })
+    );
+    return;
+  }
+
+  if (eventName === "UserPromptSubmit") {
+    process.stdout.write(
+      JSON.stringify({
+        decision: "block",
+        reason: `${reason} Handoff criado em ${handoffPath}. Continue no Codex usando esse arquivo.`
+      })
+    );
+    return;
+  }
+
+  if (eventName === "StopFailure") {
+    process.stderr.write(`${reason} Handoff criado em ${handoffPath}.\n`);
+  }
+}
+
+function main() {
+  const mode = process.argv[2] ?? "statusline";
+  const input = parseJson(readStdin(), {});
+
+  try {
+    if (mode === "statusline") {
+      statusLine(input);
+      return;
+    }
+    if (mode === "hook") {
+      hook(input);
+      return;
+    }
+    if (mode === "handoff") {
+      const state = loadState();
+      const handoffPath = buildHandoff(input, state, "Handoff manual solicitado.");
+      process.stdout.write(`${handoffPath}\n`);
+      return;
+    }
+    process.stderr.write(`Modo desconhecido: ${mode}\n`);
+    process.exitCode = 1;
+  } catch (error) {
+    logEvent({ action: "error", mode, message: error?.message ?? String(error) });
+    if (mode === "statusline") {
+      process.stdout.write("Claude limit handoff indisponivel");
+      return;
+    }
+    process.stderr.write(`${error?.stack ?? error}\n`);
+    process.exitCode = 1;
+  }
+}
+
+main();

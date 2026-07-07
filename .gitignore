@@ -1,0 +1,8 @@
+node_modules/
+npm-debug.log*
+CLAUDE_TO_CODEX_HANDOFF.md
+.DS_Store
+Thumbs.db
+*.bak-limit-handoff-*
+*.bak-limit-handoff-uninstall-*
+*.bak-limit-handoff-statusline-*

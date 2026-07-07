@@ -1,0 +1,18 @@
+{
+  "name": "claude-limit-tools",
+  "description": "Claude Code tools for managing subscription usage limits and handoffs between coding agents.",
+  "owner": {
+    "name": "Diego"
+  },
+  "plugins": [
+    {
+      "name": "claude-limit-handoff",
+      "source": "./claude-limit-handoff-plugin",
+      "description": "Pause Claude Code near the 5-hour usage limit and create a Codex handoff file.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Diego"
+      }
+    }
+  ]
+}
