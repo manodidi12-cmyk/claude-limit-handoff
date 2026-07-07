@@ -1,0 +1,39 @@
+{
+  "name": "claude-limit-handoff",
+  "version": "0.1.0",
+  "description": "Create handoff files between Codex and Claude Code near usage limits.",
+  "author": {
+    "name": "Diego",
+    "email": "diegojacosilva12@gmail.com",
+    "url": "https://github.com/manodidi12-cmyk"
+  },
+  "homepage": "https://github.com/manodidi12-cmyk/claude-limit-handoff",
+  "repository": "https://github.com/manodidi12-cmyk/claude-limit-handoff",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "claude-code",
+    "handoff",
+    "usage-limit",
+    "productivity"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Claude Limit Handoff",
+    "shortDescription": "Generate Claude and Codex handoffs near usage limits.",
+    "longDescription": "Create handoff files so Codex and Claude Code can continue each other's work when one assistant is near a usage limit. Includes commands for Codex-to-Claude handoffs, Claude-to-Codex handoffs, and Codex usage checks.",
+    "developerName": "Diego",
+    "category": "Productivity",
+    "capabilities": [
+      "Write",
+      "Automation"
+    ],
+    "websiteURL": "https://github.com/manodidi12-cmyk/claude-limit-handoff",
+    "defaultPrompt": [
+      "Create a Codex to Claude handoff.",
+      "Check Codex usage and hand off if near limit.",
+      "Create a Claude to Codex handoff."
+    ],
+    "brandColor": "#2563EB"
+  }
+}

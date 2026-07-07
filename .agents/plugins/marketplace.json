@@ -1,0 +1,20 @@
+{
+  "name": "claude-limit-tools",
+  "interface": {
+    "displayName": "Claude Limit Tools"
+  },
+  "plugins": [
+    {
+      "name": "claude-limit-handoff",
+      "source": {
+        "source": "local",
+        "path": "./plugins/claude-limit-handoff"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

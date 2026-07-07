@@ -49,6 +49,19 @@ node .\src\claude-limit-handoff.mjs codex-check 90
 
 If the latest Codex primary usage is at or above `90`, it creates `CODEX_TO_CLAUDE_HANDOFF.md`; otherwise it prints the current usage and exits without writing the file.
 
+## Codex plugin
+
+This repository includes a Codex plugin at `plugins/claude-limit-handoff` and a repo-local marketplace at `.agents/plugins/marketplace.json`.
+
+Install it with:
+
+```powershell
+codex plugin marketplace add .
+codex plugin add claude-limit-handoff@claude-limit-tools
+```
+
+Start a new Codex thread after installing. The plugin provides a `handoff` skill that explains and runs the handoff commands from any project.
+
 ## Components
 
 ### Status line reader

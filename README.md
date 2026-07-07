@@ -6,12 +6,14 @@
   - [Get Started](#get-started)
   - [Use It](#use-it)
   - [Install Options](#install-options)
+  - [Codex Plugin](#codex-plugin)
   - [How It Works](#how-it-works)
   - [Detailed English Guide](docs/en/overview.md)
 - [Portugues](#portugues)
   - [Comece Agora](#comece-agora)
   - [Como Usar](#como-usar)
   - [Instalacao](#instalacao)
+  - [Plugin do Codex](#plugin-do-codex)
   - [Guia Detalhado em Portugues](docs/pt-br/visao-geral.md)
 
 ---
@@ -99,6 +101,12 @@ Generate the Codex-to-Claude handoff only if Codex is already at or above the th
 node .\src\claude-limit-handoff.mjs codex-check 90
 ```
 
+After installing the Codex plugin, you can also ask Codex:
+
+```text
+Use the Claude Limit Handoff skill to create a Codex to Claude handoff.
+```
+
 ## Install Options
 
 ### Recommended: CLI install
@@ -142,6 +150,35 @@ The plugin flow is useful if you specifically want to manage it through Claude C
 
 Important: Claude Code plugins can ship hooks and skills, but they cannot currently install a global `statusLine` by themselves. That is why the plugin has a small setup skill. The CLI install above does everything in one command.
 
+### Optional: install as a Codex plugin
+
+This repository also includes a Codex plugin marketplace:
+
+```powershell
+codex plugin marketplace add .
+codex plugin add claude-limit-handoff@claude-limit-tools
+```
+
+Start a new Codex thread after installing so the skill is loaded.
+
+## Codex Plugin
+
+The Codex plugin is installed from this repository marketplace:
+
+```text
+claude-limit-handoff@claude-limit-tools
+```
+
+It adds a Codex skill named `handoff`. Use it when you want Codex to create or check a handoff for Claude Code.
+
+Example prompt in a new Codex thread:
+
+```text
+Use the handoff skill to create a Codex to Claude handoff for this project.
+```
+
+Current limitation: Codex does not expose the same automatic `PreToolUse` pause hook used by Claude Code here. The Codex plugin gives you a global skill/command path, while the Claude side remains automatic.
+
 ## What Gets Written
 
 `CLAUDE_TO_CODEX_HANDOFF.md` includes:
@@ -174,11 +211,13 @@ Codex stores rate-limit snapshots in local session logs. Claude Limit Handoff ca
 ```text
 .
 |-- .claude-plugin/marketplace.json
+|-- .agents/plugins/marketplace.json
 |-- claude-limit-handoff-plugin/
 |   |-- .claude-plugin/plugin.json
 |   |-- hooks/hooks.json
 |   |-- scripts/
 |   `-- skills/setup/SKILL.md
+|-- plugins/claude-limit-handoff/
 |-- docs/
 |   |-- en/
 |   `-- pt-br/
@@ -288,6 +327,12 @@ Gerar o handoff Codex-para-Claude somente se o Codex ja estiver no limite:
 node .\src\claude-limit-handoff.mjs codex-check 90
 ```
 
+Depois de instalar o plugin do Codex, voce tambem pode pedir ao Codex:
+
+```text
+Use a skill Claude Limit Handoff para criar um handoff do Codex para o Claude.
+```
+
 ## Instalacao
 
 ### Recomendado: instalacao pelo CLI
@@ -330,3 +375,32 @@ O repositorio tambem inclui manifest de plugin/marketplace do Claude Code:
 Use esse caminho se voce quiser gerenciar pelo sistema de plugins do Claude Code.
 
 Importante: plugins do Claude Code conseguem instalar hooks e skills, mas ainda nao conseguem instalar uma `statusLine` global sozinhos. Por isso o plugin tem uma skill pequena de setup. A instalacao pelo CLI acima faz tudo em um comando.
+
+### Opcional: plugin do Codex
+
+O repositorio tambem inclui um marketplace de plugin do Codex:
+
+```powershell
+codex plugin marketplace add .
+codex plugin add claude-limit-handoff@claude-limit-tools
+```
+
+Abra uma nova conversa no Codex depois de instalar para a skill ser carregada.
+
+## Plugin do Codex
+
+O plugin do Codex e instalado a partir deste marketplace do repositorio:
+
+```text
+claude-limit-handoff@claude-limit-tools
+```
+
+Ele adiciona uma skill do Codex chamada `handoff`. Use quando quiser que o Codex crie ou cheque um handoff para o Claude Code.
+
+Exemplo de prompt em uma nova conversa do Codex:
+
+```text
+Use a skill handoff para criar um handoff do Codex para o Claude neste projeto.
+```
+
+Limitacao atual: o Codex nao expoe o mesmo hook automatico `PreToolUse` que usamos no Claude Code. O plugin do Codex te da uma skill/caminho global de comando, enquanto o lado do Claude continua automatico.
