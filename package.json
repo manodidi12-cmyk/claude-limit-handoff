@@ -2,7 +2,6 @@
   "name": "claude-limit-handoff",
   "version": "0.1.0",
   "description": "Create handoff files between Claude Code and Codex near usage limits.",
-  "private": true,
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -10,9 +9,12 @@
     "url": "https://github.com/manodidi12-cmyk/claude-limit-handoff.git"
   },
   "scripts": {
-    "test": "node test/guard.test.mjs"
+    "test": "node test/guard.test.mjs",
+    "install:claude": "node src/claude-limit-handoff.mjs install 90",
+    "uninstall:claude": "node src/claude-limit-handoff.mjs uninstall"
   },
   "bin": {
-    "claude-limit-handoff": "./src/claude-limit-handoff.mjs"
+    "claude-limit-handoff": "./src/claude-limit-handoff.mjs",
+    "clh": "./src/claude-limit-handoff.mjs"
   }
 }

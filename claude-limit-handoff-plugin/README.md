@@ -6,6 +6,16 @@ Portuguese documentation is available in the repository root and in `docs/pt-br/
 
 The repository also includes a manual reverse helper that creates `CODEX_TO_CLAUDE_HANDOFF.md` from local Codex session history.
 
+## Recommended install
+
+For most users, the repository-level CLI install is simpler:
+
+```powershell
+node .\src\claude-limit-handoff.mjs install 90
+```
+
+That command installs both hooks and the required Claude Code `statusLine` in one step.
+
 ## Why this plugin exists
 
 Claude Code can hit the 5-hour usage window in the middle of an implementation. This plugin turns that moment into a controlled handoff: it writes project state, recent conversation context, git status, and next steps so the user can continue in Codex.

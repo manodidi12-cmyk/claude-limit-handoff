@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 const DEFAULT_THRESHOLD = 90;
 const STATE_DIR = process.env.CLAUDE_LIMIT_HANDOFF_STATE_DIR
@@ -36,6 +37,10 @@ function parseJson(text, fallback = {}) {
 }
 
 function getThreshold() {
+  const thresholdFlagIndex = process.argv.findIndex((arg) => arg === "--threshold" || arg === "-t");
+  const fromFlag = thresholdFlagIndex >= 0 ? Number(process.argv[thresholdFlagIndex + 1]) : null;
+  if (Number.isFinite(fromFlag) && fromFlag > 0) return fromFlag;
+
   const fromArg = process.argv[3] ? Number(process.argv[3]) : null;
   if (Number.isFinite(fromArg) && fromArg > 0) return fromArg;
 
@@ -507,6 +512,100 @@ function codexCheck(input) {
   );
 }
 
+function currentScriptPath() {
+  return path.resolve(process.argv[1] || fileURLToPath(import.meta.url));
+}
+
+function timestampForBackup() {
+  return new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
+}
+
+function readClaudeSettings(settingsPath) {
+  if (!fs.existsSync(settingsPath)) return {};
+  return parseJson(fs.readFileSync(settingsPath, "utf8"), {});
+}
+
+function installClaudeIntegration() {
+  const threshold = getThreshold();
+  const scriptPath = currentScriptPath();
+  const nodePath = process.execPath;
+  const claudeDir = path.join(os.homedir(), ".claude");
+  const settingsPath = path.join(claudeDir, "settings.json");
+
+  fs.mkdirSync(claudeDir, { recursive: true });
+  if (fs.existsSync(settingsPath)) {
+    fs.copyFileSync(settingsPath, `${settingsPath}.bak-limit-handoff-${timestampForBackup()}`);
+  }
+
+  const settings = readClaudeSettings(settingsPath);
+  settings.hooks ??= {};
+
+  const hookCommand = {
+    type: "command",
+    command: nodePath,
+    args: [scriptPath, "hook", String(threshold)],
+    timeout: 5
+  };
+
+  function removeExisting(groups) {
+    return (Array.isArray(groups) ? groups : []).filter((group) => {
+      return !JSON.stringify(group).includes("claude-limit-handoff.mjs");
+    });
+  }
+
+  function addHook(eventName, matcher = null) {
+    const group = { hooks: [hookCommand] };
+    if (matcher) group.matcher = matcher;
+    settings.hooks[eventName] = [...removeExisting(settings.hooks[eventName]), group];
+  }
+
+  addHook("PreToolUse", "*");
+  addHook("UserPromptSubmit");
+  addHook("Stop");
+  addHook("StopFailure", "rate_limit");
+
+  settings.statusLine = {
+    type: "command",
+    command: `${JSON.stringify(nodePath)} ${JSON.stringify(scriptPath)} statusline ${threshold}`,
+    refreshInterval: 15,
+    padding: 1
+  };
+
+  fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+  process.stdout.write(`Installed Claude Limit Handoff in ${settingsPath}\n`);
+  process.stdout.write(`Threshold: ${threshold}%\n`);
+  process.stdout.write("Restart Claude Code to load the hooks and status line.\n");
+}
+
+function uninstallClaudeIntegration() {
+  const settingsPath = path.join(os.homedir(), ".claude", "settings.json");
+  if (!fs.existsSync(settingsPath)) {
+    process.stdout.write("settings.json not found.\n");
+    return;
+  }
+
+  fs.copyFileSync(settingsPath, `${settingsPath}.bak-limit-handoff-uninstall-${timestampForBackup()}`);
+  const settings = readClaudeSettings(settingsPath);
+
+  if (settings.statusLine && JSON.stringify(settings.statusLine).includes("claude-limit-handoff.mjs")) {
+    delete settings.statusLine;
+  }
+
+  if (settings.hooks && typeof settings.hooks === "object") {
+    for (const eventName of Object.keys(settings.hooks)) {
+      settings.hooks[eventName] = (Array.isArray(settings.hooks[eventName]) ? settings.hooks[eventName] : []).filter((group) => {
+        return !JSON.stringify(group).includes("claude-limit-handoff.mjs");
+      });
+      if (settings.hooks[eventName].length === 0) {
+        delete settings.hooks[eventName];
+      }
+    }
+  }
+
+  fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+  process.stdout.write("Removed Claude Limit Handoff. A backup was created next to settings.json.\n");
+}
+
 function statusLine(input) {
   const currentLimits = extractLimits(input);
   const cwd = getCwd(input);
@@ -592,6 +691,14 @@ function main() {
   try {
     if (mode === "statusline") {
       statusLine(input);
+      return;
+    }
+    if (mode === "install") {
+      installClaudeIntegration();
+      return;
+    }
+    if (mode === "uninstall") {
+      uninstallClaudeIntegration();
       return;
     }
     if (mode === "hook") {
