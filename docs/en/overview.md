@@ -106,6 +106,32 @@ For the local helper installer:
 .\install.ps1 -Threshold 85
 ```
 
+## Install paths
+
+Use the CLI/PowerShell install for normal use:
+
+```powershell
+node .\src\claude-limit-handoff.mjs install 90
+```
+
+or:
+
+```powershell
+.\install.ps1 -Threshold 90
+```
+
+This writes both Claude Code hooks and the required `statusLine` to the local `~/.claude/settings.json`.
+
+The Claude Code plugin path is also available:
+
+```text
+/plugin marketplace add manodidi12-cmyk/claude-limit-handoff
+/plugin install claude-limit-handoff@claude-limit-tools
+/claude-limit-handoff:setup
+```
+
+The plugin path needs `/claude-limit-handoff:setup` because Claude Code plugins cannot currently install a global `statusLine` by themselves.
+
 ## Known limitations
 
 - Claude Code does not expose a way for this script to interrupt a single long model response while it is already streaming.

@@ -106,6 +106,32 @@ Para o instalador local:
 .\install.ps1 -Threshold 85
 ```
 
+## Caminhos de instalacao
+
+Para uso normal, use a instalacao por CLI/PowerShell:
+
+```powershell
+node .\src\claude-limit-handoff.mjs install 90
+```
+
+ou:
+
+```powershell
+.\install.ps1 -Threshold 90
+```
+
+Isso grava os hooks do Claude Code e a `statusLine` necessaria no `~/.claude/settings.json` local.
+
+O caminho via plugin do Claude Code tambem existe:
+
+```text
+/plugin marketplace add manodidi12-cmyk/claude-limit-handoff
+/plugin install claude-limit-handoff@claude-limit-tools
+/claude-limit-handoff:setup
+```
+
+Esse caminho precisa de `/claude-limit-handoff:setup` porque plugins do Claude Code ainda nao conseguem instalar uma `statusLine` global sozinhos.
+
 ## Limitacoes conhecidas
 
 - O Claude Code nao expoe uma forma deste script interromper uma resposta longa enquanto ela ja esta sendo gerada.

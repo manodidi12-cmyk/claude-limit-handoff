@@ -109,6 +109,13 @@ Use the Claude Limit Handoff skill to create a Codex to Claude handoff.
 
 ## Install Options
 
+There are two Claude Code install paths. Most users should use the CLI/PowerShell path.
+
+| Method | Best for | What it installs | Extra setup? |
+| --- | --- | --- | --- |
+| CLI / PowerShell | Normal use on your own machine | Claude hooks + `statusLine` in one command | No |
+| Claude Code plugin | Users who want to manage it through Claude's plugin system | Plugin hooks + setup skill | Yes, run `/claude-limit-handoff:setup` |
+
 ### Recommended: CLI install
 
 ```powershell
@@ -123,18 +130,22 @@ The install command:
 - stores state in `~/.claude/limit-handoff/`;
 - uses the threshold you pass, defaulting to `90`.
 
+Use this on every computer where you want Claude Code handoff protection. The setup is local to that machine, even when you use the same Claude account.
+
 Uninstall:
 
 ```powershell
 node .\src\claude-limit-handoff.mjs uninstall
 ```
 
-PowerShell wrappers are also included:
+PowerShell shortcuts are included for convenience:
 
 ```powershell
 .\install.ps1 -Threshold 90
 .\uninstall.ps1
 ```
+
+These shortcuts do the same thing as the direct `node ... install` and `node ... uninstall` commands. They are useful on Windows because they are shorter and easier to remember.
 
 ### Optional: install as a Claude Code plugin
 
@@ -148,7 +159,14 @@ This repository also ships a Claude Code plugin/marketplace manifest:
 
 The plugin flow is useful if you specifically want to manage it through Claude Code's plugin system.
 
-Important: Claude Code plugins can ship hooks and skills, but they cannot currently install a global `statusLine` by themselves. That is why the plugin has a small setup skill. The CLI install above does everything in one command.
+Important: Claude Code plugins can ship hooks and skills, but they cannot currently install a global `statusLine` by themselves. That is why the plugin has a small setup skill. The CLI/PowerShell install above does everything in one command.
+
+In practical terms:
+
+- CLI/PowerShell install is simpler and recommended.
+- Claude Code plugin install is more "plugin-native", but needs the extra setup step.
+- Both paths write local configuration on the current computer.
+- Neither path syncs automatically to another computer through your Claude account.
 
 ### Optional: install as a Codex plugin
 
@@ -335,6 +353,13 @@ Use a skill Claude Limit Handoff para criar um handoff do Codex para o Claude.
 
 ## Instalacao
 
+Existem dois caminhos para instalar no Claude Code. Para uso normal, use o caminho CLI/PowerShell.
+
+| Metodo | Melhor para | O que instala | Setup extra? |
+| --- | --- | --- | --- |
+| CLI / PowerShell | Uso normal na sua maquina | Hooks do Claude + `statusLine` em um comando | Nao |
+| Plugin do Claude Code | Quem quer gerenciar pelo sistema de plugins do Claude | Hooks do plugin + skill de setup | Sim, rodar `/claude-limit-handoff:setup` |
+
 ### Recomendado: instalacao pelo CLI
 
 ```powershell
@@ -349,6 +374,8 @@ Esse comando:
 - salva estado em `~/.claude/limit-handoff/`;
 - usa o limite informado, por padrao `90`.
 
+Use esse comando em cada computador onde voce quer proteger o Claude Code. A configuracao e local da maquina, mesmo usando a mesma conta Claude.
+
 Remover:
 
 ```powershell
@@ -362,6 +389,8 @@ Tambem existem atalhos PowerShell:
 .\uninstall.ps1
 ```
 
+Esses atalhos fazem a mesma coisa que `node ... install` e `node ... uninstall`. Eles existem para facilitar no Windows, porque sao mais curtos e mais faceis de lembrar.
+
 ### Opcional: plugin do Claude Code
 
 O repositorio tambem inclui manifest de plugin/marketplace do Claude Code:
@@ -374,7 +403,14 @@ O repositorio tambem inclui manifest de plugin/marketplace do Claude Code:
 
 Use esse caminho se voce quiser gerenciar pelo sistema de plugins do Claude Code.
 
-Importante: plugins do Claude Code conseguem instalar hooks e skills, mas ainda nao conseguem instalar uma `statusLine` global sozinhos. Por isso o plugin tem uma skill pequena de setup. A instalacao pelo CLI acima faz tudo em um comando.
+Importante: plugins do Claude Code conseguem instalar hooks e skills, mas ainda nao conseguem instalar uma `statusLine` global sozinhos. Por isso o plugin tem uma skill pequena de setup. A instalacao por CLI/PowerShell acima faz tudo em um comando.
+
+Na pratica:
+
+- CLI/PowerShell e mais simples e recomendado.
+- Plugin do Claude Code e mais "nativo de plugin", mas precisa do setup extra.
+- Os dois caminhos escrevem configuracao local neste computador.
+- Nenhum dos dois sincroniza automaticamente para outro computador pela sua conta Claude.
 
 ### Opcional: plugin do Codex
 
