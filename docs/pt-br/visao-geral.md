@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-O Claude Limit Handoff ajuda quem trabalha com Claude Code e Codex. Quando o Claude Code chega perto do limite da janela de 5 horas, o plugin pausa novas chamadas de ferramenta e escreve um documento de handoff para o Codex continuar do mesmo estado do projeto.
+O Claude Limit Handoff ajuda quem trabalha com Claude Code e Codex. Quando o Claude Code chega perto do limite da janela de 5 horas, o plugin pausa novas chamadas de ferramenta e escreve um documento de handoff para o Codex continuar do mesmo estado do projeto. Ele tambem consegue criar um handoff manual do Codex para o Claude usando o historico local de sessoes do Codex.
 
 ## Fluxo completo
 
@@ -15,6 +15,39 @@ O Claude Limit Handoff ajuda quem trabalha com Claude Code e Codex. Quando o Cla
 7. Se o uso estiver no limite ou acima dele, o utilitario cria `CLAUDE_TO_CODEX_HANDOFF.md`.
 8. No `PreToolUse`, o hook nega a chamada de ferramenta e orienta o Claude a parar.
 9. O usuario abre o Codex no mesmo diretorio e pede para continuar pelo arquivo de handoff.
+
+## Fluxo inverso: Codex para Claude
+
+O fluxo inverso e manual:
+
+```powershell
+.\codex-to-claude.ps1
+```
+
+ou:
+
+```powershell
+node .\src\claude-limit-handoff.mjs codex-to-claude
+```
+
+Ele cria `CODEX_TO_CLAUDE_HANDOFF.md` no projeto atual. O arquivo inclui:
+
+- caminho da sessao local mais recente do Codex;
+- ultimo snapshot de limite primario e secundario do Codex, quando existir;
+- ultimo pedido do usuario na sessao do Codex;
+- ultima resposta do Codex;
+- branch, status e diff stat do git;
+- passos sugeridos para continuar no Claude Code.
+
+Os logs de sessao do Codex podem conter metadados de limite, mas este projeto nao depende de um hook do Codex capaz de bloquear trabalho como o `PreToolUse` do Claude Code. Por isso esse sentido e um comando manual, nao uma pausa automatica.
+
+Para fazer uma checagem unica baseada no limite:
+
+```powershell
+node .\src\claude-limit-handoff.mjs codex-check 90
+```
+
+Se o ultimo uso primario do Codex estiver em `90` ou acima, ele cria `CODEX_TO_CLAUDE_HANDOFF.md`; caso contrario, mostra o uso atual e nao escreve o arquivo.
 
 ## Componentes
 
@@ -70,4 +103,10 @@ Para o instalador local:
 
 ```text
 Continue a partir do arquivo CLAUDE_TO_CODEX_HANDOFF.md. Leia o estado atual do repositorio antes de editar. Preserve alteracoes existentes do usuario, inspecione o git diff e rode as validacoes relevantes antes de finalizar.
+```
+
+## Prompt recomendado para o Claude
+
+```text
+Continue a partir do arquivo CODEX_TO_CLAUDE_HANDOFF.md. Leia o estado atual do repositorio antes de editar. Preserve alteracoes existentes do usuario, inspecione o git diff e rode as validacoes relevantes antes de finalizar.
 ```

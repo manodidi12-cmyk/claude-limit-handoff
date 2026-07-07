@@ -1,8 +1,8 @@
 # Claude Limit Handoff
 
-**English:** Claude Code plugin and local helper that pauses work near the 5-hour Claude usage window limit and creates a handoff file so you can continue in Codex.
+**English:** Claude Code plugin and local helper that pauses work near usage limits and creates handoff files between Claude Code and Codex.
 
-**Portugues:** Plugin e utilitario local para o Claude Code que pausa o trabalho perto do limite da janela de 5 horas e cria um arquivo de handoff para voce continuar no Codex.
+**Portugues:** Plugin e utilitario local que pausa o trabalho perto de limites de uso e cria arquivos de handoff entre Claude Code e Codex.
 
 ---
 
@@ -21,7 +21,8 @@ Claude Limit Handoff turns that moment into a controlled transition.
 - Watches Claude Code hooks such as `PreToolUse`, `UserPromptSubmit`, and `StopFailure`.
 - When the configured threshold is reached, default `90%`, creates `CLAUDE_TO_CODEX_HANDOFF.md` in the current project.
 - Blocks new Claude tool calls through `PreToolUse` so Claude does not keep spending the current usage window.
-- Writes a practical handoff with recent conversation context, git status, diff summary, reset estimate, and instructions for Codex.
+- Writes a practical Claude-to-Codex handoff with recent conversation context, git status, diff summary, reset estimate, and instructions for Codex.
+- Can also generate a manual Codex-to-Claude handoff from local Codex session history.
 
 ### Repository layout
 
@@ -38,6 +39,8 @@ Claude Limit Handoff turns that moment into a controlled transition.
 │   └── pt-br/
 ├── src/claude-limit-handoff.mjs
 ├── scripts/install.mjs
+├── codex-to-claude.ps1
+├── claude-to-codex.ps1
 ├── install.ps1
 ├── uninstall.ps1
 └── test/guard.test.mjs
@@ -104,6 +107,46 @@ In Codex, start from the same project directory and send:
 Continue from CLAUDE_TO_CODEX_HANDOFF.md. Read the current repository state before editing.
 ```
 
+### Manual Codex to Claude handoff
+
+The reverse direction is available as a manual command:
+
+```powershell
+.\codex-to-claude.ps1
+```
+
+or:
+
+```powershell
+node .\src\claude-limit-handoff.mjs codex-to-claude
+```
+
+This creates:
+
+```text
+CODEX_TO_CLAUDE_HANDOFF.md
+```
+
+The helper reads the latest local Codex session from `~/.codex/sessions` when available, including the most recent Codex `rate_limits` snapshot. Codex does not currently expose a Claude-style plugin hook/status-line integration in this project, so this direction is intentionally manual.
+
+In Claude Code, start from the same project directory and send:
+
+```text
+Continue from CODEX_TO_CLAUDE_HANDOFF.md. Read the current repository state before editing.
+```
+
+To inspect the latest Codex usage snapshot:
+
+```powershell
+node .\src\claude-limit-handoff.mjs codex-status
+```
+
+To generate the reverse handoff only when Codex is already at or above the configured threshold:
+
+```powershell
+node .\src\claude-limit-handoff.mjs codex-check 90
+```
+
 ### Development
 
 ```powershell
@@ -131,7 +174,8 @@ O Claude Limit Handoff transforma esse momento em uma transicao organizada.
 - Observa hooks do Claude Code como `PreToolUse`, `UserPromptSubmit` e `StopFailure`.
 - Quando o limite configurado e atingido, por padrao `90%`, cria `CLAUDE_TO_CODEX_HANDOFF.md` no projeto atual.
 - Bloqueia novas chamadas de ferramenta do Claude pelo `PreToolUse` para evitar gastar ainda mais a janela atual.
-- Escreve um handoff pratico com contexto recente, status do git, resumo do diff, estimativa de reset e instrucoes para o Codex.
+- Escreve um handoff Claude-para-Codex com contexto recente, status do git, resumo do diff, estimativa de reset e instrucoes para o Codex.
+- Tambem gera um handoff manual Codex-para-Claude usando o historico local de sessoes do Codex.
 
 ### Instalar como plugin do Claude Code
 
@@ -192,6 +236,46 @@ No Codex, abra o mesmo diretorio do projeto e envie:
 
 ```text
 Continue a partir do arquivo CLAUDE_TO_CODEX_HANDOFF.md. Leia o estado atual do repositorio antes de editar.
+```
+
+### Handoff manual do Codex para o Claude
+
+O fluxo inverso existe como comando manual:
+
+```powershell
+.\codex-to-claude.ps1
+```
+
+ou:
+
+```powershell
+node .\src\claude-limit-handoff.mjs codex-to-claude
+```
+
+Isso cria:
+
+```text
+CODEX_TO_CLAUDE_HANDOFF.md
+```
+
+O utilitario le a sessao local mais recente do Codex em `~/.codex/sessions` quando disponivel, incluindo o ultimo snapshot de `rate_limits` do Codex. O Codex ainda nao expoe, neste projeto, uma integracao de hook/status line igual a do Claude, entao esse sentido e manual de proposito.
+
+No Claude Code, abra o mesmo diretorio do projeto e envie:
+
+```text
+Continue a partir do arquivo CODEX_TO_CLAUDE_HANDOFF.md. Leia o estado atual do repositorio antes de editar.
+```
+
+Para inspecionar o ultimo snapshot de uso do Codex:
+
+```powershell
+node .\src\claude-limit-handoff.mjs codex-status
+```
+
+Para gerar o handoff inverso somente quando o Codex ja estiver no limite configurado:
+
+```powershell
+node .\src\claude-limit-handoff.mjs codex-check 90
 ```
 
 ### Desenvolvimento

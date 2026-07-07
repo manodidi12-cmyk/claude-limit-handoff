@@ -1,6 +1,7 @@
 node_modules/
 npm-debug.log*
 CLAUDE_TO_CODEX_HANDOFF.md
+CODEX_TO_CLAUDE_HANDOFF.md
 .DS_Store
 Thumbs.db
 *.bak-limit-handoff-*

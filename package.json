@@ -1,7 +1,7 @@
 {
   "name": "claude-limit-handoff",
   "version": "0.1.0",
-  "description": "Pause Claude Code near the 5-hour usage limit and create a Codex handoff file.",
+  "description": "Create handoff files between Claude Code and Codex near usage limits.",
   "private": true,
   "type": "module",
   "license": "MIT",

@@ -8,7 +8,7 @@
     {
       "name": "claude-limit-handoff",
       "source": "./claude-limit-handoff-plugin",
-      "description": "Pause Claude Code near the 5-hour usage limit and create a Codex handoff file.",
+      "description": "Pause Claude Code near the 5-hour usage limit and create handoff files between Claude Code and Codex.",
       "version": "0.1.0",
       "author": {
         "name": "Diego"

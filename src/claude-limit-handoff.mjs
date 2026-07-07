@@ -12,6 +12,7 @@ const STATE_DIR = process.env.CLAUDE_LIMIT_HANDOFF_STATE_DIR
 const STATE_FILE = path.join(STATE_DIR, "state.json");
 const LOG_FILE = path.join(STATE_DIR, "events.log");
 const HANDOFF_NAME = "CLAUDE_TO_CODEX_HANDOFF.md";
+const CODEX_HANDOFF_NAME = "CODEX_TO_CLAUDE_HANDOFF.md";
 
 function ensureStateDir() {
   fs.mkdirSync(STATE_DIR, { recursive: true });
@@ -137,6 +138,143 @@ function runGit(args, cwd) {
   }
 }
 
+function getCodexHome() {
+  return process.env.CODEX_HOME
+    ? path.resolve(process.env.CODEX_HOME)
+    : path.join(os.homedir(), ".codex");
+}
+
+function listFilesRecursive(root) {
+  if (!fs.existsSync(root)) return [];
+  const files = [];
+  const stack = [root];
+
+  while (stack.length) {
+    const current = stack.pop();
+    let entries = [];
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      const fullPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(fullPath);
+      } else if (entry.isFile()) {
+        files.push(fullPath);
+      }
+    }
+  }
+
+  return files;
+}
+
+function findLatestCodexSession() {
+  const sessionsDir = path.join(getCodexHome(), "sessions");
+  const files = listFilesRecursive(sessionsDir).filter((file) => file.endsWith(".jsonl"));
+  if (!files.length) return null;
+
+  return files
+    .map((file) => {
+      try {
+        return { file, mtimeMs: fs.statSync(file).mtimeMs };
+      } catch {
+        return { file, mtimeMs: 0 };
+      }
+    })
+    .sort((a, b) => b.mtimeMs - a.mtimeMs)[0].file;
+}
+
+function parseContentBlocks(content) {
+  if (typeof content === "string") return content.trim();
+  if (!Array.isArray(content)) return "";
+
+  return content
+    .map((item) => {
+      if (typeof item === "string") return item;
+      if (typeof item?.text === "string") return item.text;
+      if (typeof item?.input_text === "string") return item.input_text;
+      if (typeof item?.output_text === "string") return item.output_text;
+      if (item?.type === "input_text" && typeof item.text === "string") return item.text;
+      if (item?.type === "output_text" && typeof item.text === "string") return item.text;
+      return "";
+    })
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
+function readCodexSession(sessionPath) {
+  const resolvedPath = sessionPath && fs.existsSync(sessionPath) ? sessionPath : findLatestCodexSession();
+  if (!resolvedPath) {
+    return { sessionPath: null, messages: [], rateLimits: null };
+  }
+
+  const text = fs.readFileSync(resolvedPath, "utf8");
+  const lines = text.trim().split(/\r?\n/).slice(-300);
+  const messages = [];
+  let rateLimits = null;
+
+  for (const line of lines) {
+    const entry = parseJson(line, null);
+    if (!entry) continue;
+
+    const payload = entry.payload ?? {};
+    if (payload.rate_limits) {
+      rateLimits = payload.rate_limits;
+    }
+
+    if (payload.type === "user_message" && typeof payload.message === "string") {
+      messages.push({ role: "user", content: payload.message });
+      continue;
+    }
+
+    if (payload.type === "agent_message" && typeof payload.message === "string") {
+      messages.push({ role: "assistant", content: payload.message });
+      continue;
+    }
+
+    if (entry.type === "response_item" && payload.type === "message") {
+      const role = payload.role;
+      const content = parseContentBlocks(payload.content);
+      if ((role === "user" || role === "assistant") && content) {
+        messages.push({ role, content });
+      }
+    }
+  }
+
+  return { sessionPath: resolvedPath, messages: dedupeMessages(messages).slice(-16), rateLimits };
+}
+
+function dedupeMessages(messages) {
+  const result = [];
+  let previousKey = "";
+
+  for (const message of messages) {
+    const key = `${message.role}:${message.content}`;
+    if (key !== previousKey) {
+      result.push(message);
+    }
+    previousKey = key;
+  }
+
+  return result;
+}
+
+function formatCodexLimit(limit) {
+  if (!limit) return "desconhecido";
+  const used = toNumber(limit.used_percent);
+  const windowMinutes = toNumber(limit.window_minutes);
+  const reset = unixSecondsToLocalTime(limit.resets_at);
+  const pieces = [];
+  if (used !== null) pieces.push(`${Math.round(used)}% usado`);
+  if (windowMinutes !== null) pieces.push(`janela ${windowMinutes} min`);
+  if (reset !== "--") pieces.push(`reset ${reset}`);
+  return pieces.length ? pieces.join(", ") : "desconhecido";
+}
+
 function readRecentTranscript(transcriptPath) {
   if (!transcriptPath || typeof transcriptPath !== "string" || !fs.existsSync(transcriptPath)) {
     return [];
@@ -186,6 +324,81 @@ function truncate(text, max = 1200) {
 function markdownList(items) {
   if (!items.length) return "- Sem dados suficientes.";
   return items.map((item) => `- ${item}`).join("\n");
+}
+
+function buildCodexToClaudeHandoff(input, reason) {
+  const cwd = getCwd(input);
+  const handoffPath = path.join(cwd, CODEX_HANDOFF_NAME);
+  const codex = readCodexSession(input.codex_session_path ?? input.codexSessionPath);
+  const gitBranch = runGit(["branch", "--show-current"], cwd);
+  const gitStatus = runGit(["status", "--short"], cwd);
+  const gitDiffStat = runGit(["diff", "--stat"], cwd);
+  const recentMessages = codex.messages;
+  const lastUser = [...recentMessages].reverse().find((message) => message.role === "user");
+  const lastAssistant = [...recentMessages].reverse().find((message) => message.role === "assistant");
+  const primaryLimit = codex.rateLimits?.primary;
+  const secondaryLimit = codex.rateLimits?.secondary;
+
+  const content = `# Handoff do Codex para o Claude
+
+Gerado automaticamente em ${new Date().toLocaleString("pt-BR")}.
+
+## Por que o Codex pausou
+
+- Motivo: ${reason}
+- Limite primario do Codex: ${formatCodexLimit(primaryLimit)}
+- Limite secundario do Codex: ${formatCodexLimit(secondaryLimit)}
+- Sessao Codex: ${codex.sessionPath || "nao detectada"}
+
+## Como continuar no Claude
+
+1. Abra este projeto no terminal.
+2. Inicie o Claude Code no mesmo diretorio.
+3. Envie: "Continue a partir do arquivo ${CODEX_HANDOFF_NAME}. Leia o estado atual do repositorio antes de editar."
+4. Peca para o Claude verificar o git diff e rodar os testes/validacoes relevantes antes de finalizar.
+
+## Ultimo pedido do usuario
+
+${lastUser ? truncate(lastUser.content) : "Nao consegui extrair o ultimo pedido do historico do Codex."}
+
+## Ultima resposta do Codex
+
+${lastAssistant ? truncate(lastAssistant.content) : "Nao consegui extrair a ultima resposta do historico do Codex."}
+
+## Estado do repositorio
+
+- Diretorio: ${cwd}
+- Branch: ${gitBranch || "nao detectada"}
+
+### Arquivos alterados
+
+\`\`\`text
+${gitStatus || "Sem alteracoes detectadas pelo git ou repositorio nao inicializado."}
+\`\`\`
+
+### Diff stat
+
+\`\`\`text
+${gitDiffStat || "Sem diff stat disponivel."}
+\`\`\`
+
+## Conversa recente do Codex
+
+${markdownList(
+  recentMessages.map((message) => `${message.role}: ${truncate(message.content, 700).replace(/\n+/g, " ")}`)
+)}
+
+## Proximos passos sugeridos para o Claude
+
+- Reconstituir o contexto lendo este arquivo, o git diff e os arquivos modificados.
+- Continuar somente a partir do ponto atual, sem refazer alteracoes ja aplicadas.
+- Preservar alteracoes existentes do usuario.
+- Validar a solucao com comandos do projeto quando existirem.
+- Ao finalizar, resumir arquivos alterados, validacoes executadas e riscos restantes.
+`;
+
+  fs.writeFileSync(handoffPath, content, "utf8");
+  return { handoffPath, codex };
 }
 
 function buildHandoff(input, state, reason) {
@@ -263,6 +476,35 @@ ${markdownList(
 
   fs.writeFileSync(handoffPath, content, "utf8");
   return handoffPath;
+}
+
+function codexStatus(input) {
+  const codex = readCodexSession(input.codex_session_path ?? input.codexSessionPath);
+  const payload = {
+    sessionPath: codex.sessionPath,
+    primary: codex.rateLimits?.primary ?? null,
+    secondary: codex.rateLimits?.secondary ?? null
+  };
+  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+}
+
+function codexCheck(input) {
+  const threshold = getThreshold();
+  const codex = readCodexSession(input.codex_session_path ?? input.codexSessionPath);
+  const used = toNumber(codex.rateLimits?.primary?.used_percent);
+
+  if (used !== null && used >= threshold) {
+    const { handoffPath } = buildCodexToClaudeHandoff(
+      input,
+      `Codex chegou a ${Math.round(used)}% da janela primaria (limite configurado: ${threshold}%).`
+    );
+    process.stdout.write(`${handoffPath}\n`);
+    return;
+  }
+
+  process.stdout.write(
+    `Codex abaixo do limite: ${used === null ? "uso desconhecido" : `${Math.round(used)}%`} / ${threshold}%.\n`
+  );
 }
 
 function statusLine(input) {
@@ -359,6 +601,19 @@ function main() {
     if (mode === "handoff") {
       const state = loadState();
       const handoffPath = buildHandoff(input, state, "Handoff manual solicitado.");
+      process.stdout.write(`${handoffPath}\n`);
+      return;
+    }
+    if (mode === "codex-status") {
+      codexStatus(input);
+      return;
+    }
+    if (mode === "codex-check") {
+      codexCheck(input);
+      return;
+    }
+    if (["codex-to-claude", "handoff-codex", "codex-handoff", "handoff-to-claude"].includes(mode)) {
+      const { handoffPath } = buildCodexToClaudeHandoff(input, "Handoff manual solicitado pelo usuario.");
       process.stdout.write(`${handoffPath}\n`);
       return;
     }

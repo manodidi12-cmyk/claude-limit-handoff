@@ -2,7 +2,7 @@
 
 ## Goal
 
-Claude Limit Handoff helps users who work with both Claude Code and Codex. When Claude Code approaches the 5-hour usage window limit, the plugin pauses new tool use and writes a handoff document so Codex can continue from the same project state.
+Claude Limit Handoff helps users who work with both Claude Code and Codex. When Claude Code approaches the 5-hour usage window limit, the plugin pauses new tool use and writes a handoff document so Codex can continue from the same project state. It can also create a manual Codex-to-Claude handoff from the local Codex session history.
 
 ## Full flow
 
@@ -15,6 +15,39 @@ Claude Limit Handoff helps users who work with both Claude Code and Codex. When 
 7. If usage is at or above the threshold, the helper writes `CLAUDE_TO_CODEX_HANDOFF.md`.
 8. On `PreToolUse`, the hook denies the tool call and tells Claude to stop.
 9. The user opens Codex in the same directory and asks it to continue from the handoff file.
+
+## Reverse flow: Codex to Claude
+
+The reverse flow is manual:
+
+```powershell
+.\codex-to-claude.ps1
+```
+
+or:
+
+```powershell
+node .\src\claude-limit-handoff.mjs codex-to-claude
+```
+
+It creates `CODEX_TO_CLAUDE_HANDOFF.md` in the current project. The file includes:
+
+- latest local Codex session path;
+- latest Codex primary and secondary rate-limit snapshots when present;
+- last user request from the Codex session;
+- last Codex response;
+- git branch, status, and diff stat;
+- suggested Claude Code continuation steps.
+
+Codex session logs can contain rate-limit metadata, but this project does not rely on a Codex hook that can block work the same way Claude Code `PreToolUse` can. That is why this direction is a deliberate command instead of an automatic pause.
+
+To make a threshold-aware one-shot check:
+
+```powershell
+node .\src\claude-limit-handoff.mjs codex-check 90
+```
+
+If the latest Codex primary usage is at or above `90`, it creates `CODEX_TO_CLAUDE_HANDOFF.md`; otherwise it prints the current usage and exits without writing the file.
 
 ## Components
 
@@ -70,4 +103,10 @@ For the local helper installer:
 
 ```text
 Continue from CLAUDE_TO_CODEX_HANDOFF.md. Read the current repository state before editing. Preserve existing user changes, inspect the git diff, and run the relevant validations before finalizing.
+```
+
+## Recommended Claude prompt
+
+```text
+Continue from CODEX_TO_CLAUDE_HANDOFF.md. Read the current repository state before editing. Preserve existing user changes, inspect the git diff, and run the relevant validations before finalizing.
 ```

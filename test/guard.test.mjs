@@ -10,8 +10,11 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "limit-handoff-test-"));
 const home = path.join(tmp, "home");
 const project = path.join(tmp, "project");
 const stateDir = path.join(tmp, "state");
+const codexHome = path.join(tmp, "codex");
+const codexSessions = path.join(codexHome, "sessions", "2026", "07", "07");
 fs.mkdirSync(home, { recursive: true });
 fs.mkdirSync(project, { recursive: true });
+fs.mkdirSync(codexSessions, { recursive: true });
 
 function run(mode, input) {
   return spawnSync(process.execPath, [cli, mode], {
@@ -22,7 +25,8 @@ function run(mode, input) {
       HOME: home,
       USERPROFILE: home,
       CLAUDE_LIMIT_HANDOFF_THRESHOLD: "90",
-      CLAUDE_LIMIT_HANDOFF_STATE_DIR: stateDir
+      CLAUDE_LIMIT_HANDOFF_STATE_DIR: stateDir,
+      CODEX_HOME: codexHome
     },
     cwd: project
   });
@@ -52,6 +56,40 @@ const hook = run("hook", {
 assert.equal(hook.status, 0);
 assert.match(hook.stdout, /permissionDecision/);
 assert.ok(fs.existsSync(path.join(project, "CLAUDE_TO_CODEX_HANDOFF.md")));
+
+const codexSession = path.join(codexSessions, "rollout-test.jsonl");
+fs.writeFileSync(
+  codexSession,
+  [
+    JSON.stringify({ type: "event_msg", payload: { type: "user_message", message: "Implemente o fluxo inverso." } }),
+    JSON.stringify({ type: "event_msg", payload: { type: "agent_message", message: "Vou criar o handoff do Codex para o Claude." } }),
+    JSON.stringify({
+      type: "event_msg",
+      payload: {
+        type: "token_count",
+        rate_limits: {
+          primary: { used_percent: 92, window_minutes: 300, resets_at: 1893456000 },
+          secondary: { used_percent: 8, window_minutes: 10080, resets_at: 1893974400 }
+        }
+      }
+    })
+  ].join("\n"),
+  "utf8"
+);
+
+const codexStatus = run("codex-status", {});
+assert.equal(codexStatus.status, 0);
+assert.match(codexStatus.stdout, /"used_percent": 92/);
+
+const codexCheck = run("codex-check", {});
+assert.equal(codexCheck.status, 0);
+assert.match(codexCheck.stdout, /CODEX_TO_CLAUDE_HANDOFF\.md/);
+
+const codexHandoff = run("codex-to-claude", {});
+assert.equal(codexHandoff.status, 0);
+const codexHandoffPath = path.join(project, "CODEX_TO_CLAUDE_HANDOFF.md");
+assert.ok(fs.existsSync(codexHandoffPath));
+assert.match(fs.readFileSync(codexHandoffPath, "utf8"), /Continue a partir do arquivo CODEX_TO_CLAUDE_HANDOFF\.md/);
 
 const belowHome = path.join(tmp, "home-below");
 const belowState = path.join(tmp, "state-below");

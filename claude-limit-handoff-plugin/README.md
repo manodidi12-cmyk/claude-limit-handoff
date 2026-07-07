@@ -4,6 +4,8 @@ Claude Code plugin that watches the 5-hour Claude usage window and creates a `CL
 
 Portuguese documentation is available in the repository root and in `docs/pt-br/`.
 
+The repository also includes a manual reverse helper that creates `CODEX_TO_CLAUDE_HANDOFF.md` from local Codex session history.
+
 ## Why this plugin exists
 
 Claude Code can hit the 5-hour usage window in the middle of an implementation. This plugin turns that moment into a controlled handoff: it writes project state, recent conversation context, git status, and next steps so the user can continue in Codex.
@@ -51,6 +53,7 @@ Then restart Claude Code.
 - Os hooks do plugin consultam esse estado antes de prompts e chamadas de ferramenta.
 - Quando o uso chega ao limite configurado, o plugin cria `CLAUDE_TO_CODEX_HANDOFF.md`.
 - O `PreToolUse` bloqueia novas ferramentas para o Claude parar de gastar a janela atual.
+- O utilitario local tambem pode criar `CODEX_TO_CLAUDE_HANDOFF.md` manualmente a partir do historico do Codex.
 
 ## Configuration
 
