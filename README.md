@@ -1,6 +1,22 @@
 # Claude Limit Handoff
 
-Read this in: **English** | [Portugues](#portugues)
+## Index
+
+- [English](#english)
+  - [Get Started](#get-started)
+  - [Use It](#use-it)
+  - [Install Options](#install-options)
+  - [How It Works](#how-it-works)
+  - [Detailed English Guide](docs/en/overview.md)
+- [Portugues](#portugues)
+  - [Comece Agora](#comece-agora)
+  - [Como Usar](#como-usar)
+  - [Instalacao](#instalacao)
+  - [Guia Detalhado em Portugues](docs/pt-br/visao-geral.md)
+
+---
+
+## English
 
 Claude Limit Handoff keeps work moving when Claude Code or Codex gets close to a usage limit. It creates a handoff file with the current repo state, recent conversation context, rate-limit information when available, and exact instructions for continuing in the other assistant.
 
